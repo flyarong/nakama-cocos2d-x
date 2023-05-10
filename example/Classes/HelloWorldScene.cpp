@@ -1,18 +1,18 @@
 /****************************************************************************
  Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
- 
+
  http://www.cocos2d-x.org
- 
+
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
  in the Software without restriction, including without limitation the rights
  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  copies of the Software, and to permit persons to whom the Software is
  furnished to do so, subject to the following conditions:
- 
+
  The above copyright notice and this permission notice shall be included in
  all copies or substantial portions of the Software.
- 
+
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -22,9 +22,16 @@
  THE SOFTWARE.
  ****************************************************************************/
 
+
+#if CC_TARGET_PLATFORM == CC_PLATFORM_ANDROID
+#include <jni.h>
+#include "platform/android/jni/JniHelper.h"
+#endif
+
 #include "HelloWorldScene.h"
-#include "SimpleAudioEngine.h"
-#include "NakamaCocos2d/NCocosHelper.h"
+#include "nakama-cpp/Nakama.h"
+
+using namespace Nakama;
 
 USING_NS_CC;
 
@@ -32,6 +39,8 @@ const std::string userName = "cocos2d-x-test-user";
 
 Scene* HelloWorld::createScene()
 {
+    CCLOG("scene created");
+
     return HelloWorld::create();
 }
 
@@ -42,13 +51,15 @@ HelloWorld::~HelloWorld()
 // Print useful error message instead of segfaulting when files are not there.
 static void problemLoading(const char* filename)
 {
-    printf("Error while loading: %s\n", filename);
-    printf("Depending on how you compiled you might have to add 'Resources/' in front of filenames in HelloWorldScene.cpp\n");
+    CCLOG("Error while loading: %s\n", filename);
+    CCLOG("Depending on how you compiled you might have to add 'Resources/' in front of filenames in HelloWorldScene.cpp\n");
 }
 
 // on "init" you need to initialize your instance
 bool HelloWorld::init()
 {
+    NLogger::initWithConsoleSink(NLogLevel::Debug);
+
     //////////////////////////////
     // 1. super init first
     if ( !Scene::init() )
@@ -94,6 +105,8 @@ bool HelloWorld::init()
 
     // add a label shows "Hello World"
     // create and initialize a label
+
+    CCLOG("creating hello world");
 
     m_label = Label::createWithTTF("Hello World", "fonts/Marker Felt.ttf", 24);
     if (m_label == nullptr)
@@ -143,8 +156,6 @@ bool HelloWorld::init()
         this->addChild(m_nakamaLogo, 0);
     }
 
-    NCocosHelper::init(NLogLevel::Debug);
-
     auto tickCallback = [this](float dt)
     {
         m_client->tick();
@@ -157,19 +168,20 @@ bool HelloWorld::init()
     getScheduler()->schedule(tickCallback, this, 0.05f /*sec*/, CC_REPEAT_FOREVER, 0, false, "nakama-tick");
 
     NClientParameters parameters;
-
+    parameters.serverKey = "defaultkey";
     parameters.host = "127.0.0.1";
-    parameters.port = DEFAULT_PORT;
+    parameters.port = 7350;
     parameters.ssl = false;
 
-    m_client = NCocosHelper::createDefaultClient(parameters);
+    m_client = createDefaultClient(parameters);
 
     auto loginFailedCallback = [this](const NError& error)
     {
+        CCLOG("Error: %s...\n", error.message.c_str());
         onError();
     };
 
-    CCLOG("Login...");
+    CCLOG("Login...\n");
 
     NStringMap vars;
 
@@ -198,7 +210,7 @@ void HelloWorld::onLoginSucceeded(NSessionPtr session)
 {
     m_session = session;
 
-    CCLOG("Login succeeded. user id: %s", m_session->getUserId().c_str());
+    CCLOG("Login succeeded. user id: %s \n", m_session->getUserId().c_str());
 
     CCASSERT(m_session->getUsername() == userName, "Wrong user name");
     CCASSERT(m_session->getVariable("test") == "value", "Wrong value");
@@ -214,34 +226,36 @@ void HelloWorld::connect()
 
     m_rtListener->setConnectCallback([this]()
     {
-        CCLOG("Connected!");
+        CCLOG("Connected! \n");
         joinChat("chat-room");
         m_nakamaLogo->setColor(Color3B::GREEN);
     });
 
     m_rtListener->setErrorCallback([this](const NRtError& error)
     {
+        CCLOG("Socket Error: %s...\n", error.message.c_str());
+
         onError();
     });
 
     m_rtListener->setChannelMessageCallback([this](const NChannelMessage& msg)
     {
         // msg.content is JSON string
-        CCLOG("OnChannelMessage %s", msg.content.c_str());
+        CCLOG("OnChannelMessage %s\n", msg.content.c_str());
         m_label->setString(msg.username + ": " + msg.content);
     });
 
-    m_rtClient = NCocosHelper::createRtClient(m_client, DEFAULT_PORT);
+    m_rtClient = this->m_client->createRtClient();
     m_rtClient->setListener(m_rtListener.get());
 
-	CCLOG("Connect...");
+	CCLOG("Connect...\n");
 
     m_rtClient->connect(m_session, true/*, NRtClientProtocol::Json*/);
 }
 
 void HelloWorld::joinChat(const std::string& topicName)
 {
-    CCLOG("Joining room %s", topicName.c_str());
+    CCLOG("Joining room %s\nf", topicName.c_str());
 
     m_rtClient->joinChat(
         topicName,
@@ -252,7 +266,7 @@ void HelloWorld::joinChat(const std::string& topicName)
         {
             m_chatId = channel->id;
 
-            CCLOG("Joined topic id %s", channel->id.c_str());
+            CCLOG("Joined topic id %s\n", channel->id.c_str());
 
             sendChatMessage("Hey dude!");
 
@@ -270,11 +284,11 @@ void HelloWorld::sendChatMessage(const std::string& message)
     // data must be JSON
     std::string data = "{\"msg\":\"" + message + "\"}";
 
-    CCLOG("sending topic message %s", message.c_str());
+    CCLOG("sending topic message %s\n", message.c_str());
 
     m_rtClient->writeChatMessage(m_chatId, data, [](const NChannelMessageAck& ack)
     {
-        CCLOG("Sent OK. message id %s", ack.messageId.c_str());
+        CCLOG("Sent OK. message id %s\n", ack.messageId.c_str());
     },
     [this](const NRtError& error)
     {
@@ -293,11 +307,7 @@ void HelloWorld::menuCloseCallback(Ref* pSender)
     //Close the cocos2d-x game scene and quit the application
     Director::getInstance()->end();
 
-#if (CC_TARGET_PLATFORM == CC_PLATFORM_IOS)
-    exit(0);
-#endif
-
-    /*To navigate back to native iOS screen(if present) without quitting the application  ,do not use Director::getInstance()->end() and exit(0) as given above,instead trigger a custom event created in RootViewController.mm as below*/
+    /*To navigate back to native iOS screen(if present) without quitting the application  ,do not use Director::getInstance()->end() as given above,instead trigger a custom event created in RootViewController.mm as below*/
 
     //EventCustom customEndEvent("game_scene_close_event");
     //_eventDispatcher->dispatchEvent(&customEndEvent);

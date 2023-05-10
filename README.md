@@ -31,65 +31,31 @@ You'll need to setup the server and database before you can connect with the cli
 
 3. Integrate the SDK into your project:
 
-When you've downloaded the SDK archive and extracted it to `NAKAMA_COCOS2D_SDK` folder, you should include it in your project.
-
-Copy cocos2d-x specific files: `NAKAMA_COCOS2D_SDK/NakamaCocos2d` folder to `Classes` folder of your project.
-
-We don't recommend to copy the SDK to your project because it's quite big in size (~1 Gb).
-
-### Setup for Mac and iOS projects
-
-1. Add `NAKAMA_COCOS2D_SDK/include` in `Build Settings > Header Search Paths`
-2. Add libs folder in `Build Settings > Library Search Paths`:
-    - `NAKAMA_COCOS2D_SDK/libs/ios` - for iOS
-    - `NAKAMA_COCOS2D_SDK/libs/mac` - for Mac
-3. Add all `.a` files located in libs folder to `General > Linked Frameworks and Libraries`
-
-### Setup for Android projects
-
-If you use `CMake` then see [Setup for CMake projects](#setup-for-cmake-projects) section.
-
-If you use `ndk-build` then add following to your `Android.mk` file:
-
-```makefile
-# add this to your module
-LOCAL_STATIC_LIBRARIES += nakama-cpp
-
-# add this after $(call import-add-path, $(LOCAL_PATH)/../../../cocos2d)
-$(call import-add-path, NAKAMA_COCOS2D_SDK)
-
-# add this after $(call import-module, cocos)
-$(call import-module, nakama-cpp-android)
-```
-
-Android uses a permissions system which determines which platform services the application will request to use and ask permission for from the user. The client uses the network to communicate with the server so you must add the "INTERNET" permission.
-
-```xml
-<uses-permission android:name="android.permission.INTERNET"/>
-```
-
 ### Setup for CMake projects
 
 Add following to your `CMakeLists.txt` file:
 
 ```cmake
-add_subdirectory(NAKAMA_COCOS2D_SDK ${CMAKE_CURRENT_BINARY_DIR}/nakama-cpp)
-target_link_libraries(${APP_NAME} ext_nakama-cpp)
+set(nakama-sdk_DIR <path-to-nakama-sdk>/share/nakama-sdk)
+find_package(nakama-sdk)
+target_link_libraries(${APP_NAME} nakama-sdk)
 ```
 
-### Setup for Visual Studio projects
+You will need to include `optional-lite` as well if you do not bring it in yourself.
 
-In `Project Settings` add following:
+```cmake
+set(optional-lite_DIR <path-to-nakama-sdk>/share/optional-lite)
+find_package(optional-lite)
+target_link_libraries(${APP_NAME} nonstd::optional-lite)
+```
 
-1. Add `NAKAMA_COCOS2D_SDK/include` to `C/C++ > General > Additional Include Directories`
-2. Add folder to `Linker > General > Additional Library Directories`:
-    - `NAKAMA_COCOS2D_SDK/libs/win32/v140` - for VS 2015 x86
-    - `NAKAMA_COCOS2D_SDK/libs/win64/v140` - for VS 2015 x64
-    - `NAKAMA_COCOS2D_SDK/libs/win32/v141` - for VS 2017 x86
-    - `NAKAMA_COCOS2D_SDK/libs/win64/v141` - for VS 2017 x64
-    - `NAKAMA_COCOS2D_SDK/libs/win32/v142` - for VS 2019 x86
-    - `NAKAMA_COCOS2D_SDK/libs/win64/v142` - for VS 2019 x64
-3. Add all `.lib` files located in above folder to `Linker > Input > Additional Dependencies`
+Some users also like to include protobuf for their own serialization in their app. To include this, do the following:
+
+```cmake
+set(Protobuf_DIR <path-to-nakama-sdk>/share/protobuf)
+find_package(Protobuf CONFIG REQUIRED)
+target_link_libraries(${APP_NAME} protobuf::libprotobuf)
+```
 
 ## Threading model
 
@@ -99,20 +65,6 @@ Nakama C++ is designed to use in one thread only.
 
 The client object has many methods to execute various features in the server or open realtime socket connections with the server.
 
-Include nakama helper header.
-
-```cpp
-#include "NakamaCocos2d/NCocosHelper.h"
-```
-
-Initialize logger with debug logging level.
-
-```cpp
-using namespace Nakama;
-
-NCocosHelper::init(NLogLevel::Debug);
-```
-
 Use the connection credentials to build a client object.
 
 ```cpp
@@ -120,7 +72,7 @@ NClientParameters parameters;
 parameters.serverKey = "defaultkey";
 parameters.host = "127.0.0.1";
 parameters.port = DEFAULT_PORT;
-NClientPtr client = NCocosHelper::createDefaultClient(parameters);
+NClientPtr client = createDefaultClient(parameters);
 ```
 
 The `createDefaultClient` will create HTTP/1.1 client to use REST API.
@@ -210,7 +162,7 @@ The client can create one or more realtime clients with the server. Each realtim
 ```cpp
 bool createStatus = true; // if the socket should show the user as online to others.
 // define realtime client in your class as NRtClientPtr rtClient;
-rtClient = NCocosHelper::createRtClient(client, DEFAULT_PORT);
+rtClient = client->createRtClient(DEFAULT_PORT);
 // define listener in your class as NRtDefaultClientListener listener;
 listener.setConnectCallback([]()
 {
@@ -222,16 +174,6 @@ rtClient->connect(session, createStatus);
 
 Don't forget to call `tick` method. See [Tick](#tick) section for details.
 
-### Logging
-
-Client logging is off by default.
-
-To enable logs output to console with debug logging level:
-
-```cpp
-NCocosHelper::init(NLogLevel::Debug);
-```
-
 ## Contribute
 
 The development roadmap is managed as GitHub issues and pull requests are welcome. If you're interested to enhance the code please open an issue to discuss the changes or drop in and discuss it in the [community forum](https://forum.heroiclabs.com).
@@ -240,6 +182,8 @@ The development roadmap is managed as GitHub issues and pull requests are welcom
 
 The cocos2d-x C++ SDK is based on [General C++ SDK](https://github.com/heroiclabs/nakama-cpp)
 
+The prerequisites for building the SDK are vcpkg (installed at $VCPKG_ROOT), CMake and git.
+
 ### Nakama Cocos2d-x Client guide
 
 You can find Nakama Cocos2d-x Client guide [here](https://heroiclabs.com/docs/cocos2d-x-client-guide/).
@@ -247,6 +191,16 @@ You can find Nakama Cocos2d-x Client guide [here](https://heroiclabs.com/docs/co
 ## Full Cocos2d-x C++ Client example
 
 You can find the Cocos2d-x C++ Client example [here](https://github.com/heroiclabs/nakama-cocos2d-x/tree/master/example)
+
+Make sure cocos2d-x is installed and that you've manually set `COCOS_2DX_ROOT` to the repository.
+
+To run the example, build our SDK and then use the cocos CLI in the example folder as documented in their README.
+The example project will find the SDK in the `out` directory using the triplet you specify in the example `CMakeLists.txt`.
+See `NAKAMA_TRIPLET` in that file.
+
+For Android you will also need to pass the appropriate app-abi, for example:
+
+`cocos compile -pandroid --app-abi arm64-v8a -m debug`
 
 ## License
 
